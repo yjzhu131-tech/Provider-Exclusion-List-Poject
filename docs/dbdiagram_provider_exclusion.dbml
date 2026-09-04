@@ -1,0 +1,56 @@
+Table data_source {
+  data_source_id integer [pk, increment]
+  source_name varchar(200) [not null]
+  file_name varchar(100) [not null]
+  file_type varchar(20) [not null] // CSV, XLSX
+  source_date date
+}
+
+Table import_log {
+  import_log_id integer [pk, increment]
+  data_source_id integer [not null, ref: > data_source.data_source_id]
+  imported_at timestamp [not null]
+  status varchar(20) [not null] // RUNNING, SUCCESS, FAILED
+  records_loaded integer [default: 0]
+  notes text
+}
+
+Table excluded_party {
+  party_id integer [pk, increment]
+  party_type varchar(20) [not null] // INDIVIDUAL, ENTITY
+  
+  first_name varchar(30)
+  middle_name varchar(30)
+  last_name varchar(30)
+  business_name varchar(100)
+  
+  provider_category varchar(100) // GENERAL
+  specialty varchar(100)         // SPECIALTY, LEIE only
+
+  dob date
+  address varchar(150)
+  city varchar(50)
+  state varchar(2)
+  zip_code varchar(10)
+}
+
+Table identifier {
+  identifier_id integer [pk, increment]
+  party_id integer [not null, ref: > excluded_party.party_id]
+  identifier_type varchar(10) [not null] // NPI, UPIN
+  identifier_value varchar(20) [not null]
+}
+
+Table exclusion_record {
+  exclusion_record_id integer [pk, increment]
+  party_id integer [not null, ref: > excluded_party.party_id]
+  data_source_id integer [not null, ref: > data_source.data_source_id]
+  import_log_id integer [not null, ref: > import_log.import_log_id]
+
+  exclusion_type varchar(50)
+  exclusion_date date [not null]
+  reinstatement_date date
+  waiver_date date
+  waiver_state varchar(10)
+  status varchar(20) [default: 'ACTIVE'] // ACTIVE
+}
