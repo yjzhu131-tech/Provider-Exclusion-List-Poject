@@ -1,0 +1,3 @@
+import_log_id,data_source_id,imported_at,status,records_loaded,notes
+1,1,2026-08-19T19:09:06,SUCCESS,83842,Cleaned from LEIE CSV
+2,2,2026-08-19T19:09:06,SUCCESS,1369,Cleaned from Georgia XLSX; rows without SANCDATE skipped
