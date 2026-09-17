@@ -1,0 +1,55 @@
+{% extends "exclusions/base.html" %}
+
+{% block title %}Results | Provider Exclusion Lookup{% endblock %}
+
+{% block content %}
+<section class="toolbar">
+  <div>
+    <p class="eyebrow">Search results</p>
+    <h1>{{ result_count }} matching record{{ result_count|pluralize }}</h1>
+  </div>
+  <a class="secondary-action" href="{% url 'exclusions:search' %}?{{ request.GET.urlencode }}">Edit search</a>
+</section>
+
+<div class="results-list">
+  {% for party in page %}
+    <article class="result-card">
+      <div class="result-main">
+        <p class="party-type">{{ party.party_type }}</p>
+        <h2><a href="{% url 'exclusions:detail' party.party_id %}">{{ party.display_name|default:"Unnamed party" }}</a></h2>
+        <p>{{ party.provider_category|default:"Provider category unavailable" }}{% if party.specialty %} · {{ party.specialty }}{% endif %}</p>
+        <p>{{ party.city|default:"City unavailable" }}{% if party.state %}, {{ party.state }}{% endif %}{% if party.zip_code %} {{ party.zip_code }}{% endif %}</p>
+      </div>
+      <div class="result-meta">
+        {% with record=party.exclusion_records.all.0 %}
+          {% if record %}
+            <strong>{{ record.status }}</strong>
+            <span>{{ record.exclusion_date|date:"M j, Y" }}</span>
+            <span>{{ record.exclusion_type|default:"No type code" }}</span>
+            <span>{{ record.data_source.source_name }}</span>
+          {% endif %}
+        {% endwith %}
+        {% for identifier in party.identifiers.all %}
+          <span>{{ identifier.identifier_type }} {{ identifier.identifier_value }}</span>
+        {% empty %}
+          <span>No identifier listed</span>
+        {% endfor %}
+      </div>
+    </article>
+  {% empty %}
+    <p class="empty">No matching records found.</p>
+  {% endfor %}
+</div>
+
+{% if page.paginator.num_pages > 1 %}
+  <nav class="pagination">
+    {% if page.has_previous %}
+      <a href="?{{ request.GET.urlencode }}&page={{ page.previous_page_number }}">Previous</a>
+    {% endif %}
+    <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}
+      <a href="?{{ request.GET.urlencode }}&page={{ page.next_page_number }}">Next</a>
+    {% endif %}
+  </nav>
+{% endif %}
+{% endblock %}

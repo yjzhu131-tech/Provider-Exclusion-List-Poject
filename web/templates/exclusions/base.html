@@ -1,0 +1,22 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Provider Exclusion Lookup{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'exclusions/styles.css' %}">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="{% url 'exclusions:search' %}">Provider Exclusion Lookup</a>
+    <nav>
+      <a href="{% url 'exclusions:search' %}">Search</a>
+      <a href="{% url 'exclusions:sources' %}">Sources</a>
+    </nav>
+  </header>
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

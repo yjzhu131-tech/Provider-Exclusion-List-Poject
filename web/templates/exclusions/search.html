@@ -1,0 +1,50 @@
+{% extends "exclusions/base.html" %}
+
+{% block title %}Search | Provider Exclusion Lookup{% endblock %}
+
+{% block content %}
+<section class="lookup-panel">
+  <div>
+    <p class="eyebrow">HHS OIG LEIE and Georgia DCH OIG records</p>
+    <h1>Search excluded providers and entities</h1>
+  </div>
+
+  <form class="search-form" action="{% url 'exclusions:results' %}" method="get">
+    <div class="quick-search">
+      {{ form.q }}
+      <button type="submit">Search</button>
+    </div>
+
+    <div class="filters">
+      <label>Party type {{ form.party_type }}</label>
+      <label>State {{ form.state }}</label>
+      <label>City {{ form.city }}</label>
+      <label>ZIP {{ form.zip_code }}</label>
+      <label>Source {{ form.source }}</label>
+      <label>Status {{ form.status }}</label>
+      <label>Exclusion type {{ form.exclusion_type }}</label>
+      <label>From {{ form.date_from }}</label>
+      <label>To {{ form.date_to }}</label>
+    </div>
+  </form>
+</section>
+
+<section class="stats-grid" aria-label="Database summary">
+  <div>
+    <span>{{ totals.parties }}</span>
+    <p>Excluded parties</p>
+  </div>
+  <div>
+    <span>{{ totals.identifiers }}</span>
+    <p>NPI / UPIN identifiers</p>
+  </div>
+  <div>
+    <span>{{ totals.sources }}</span>
+    <p>Official sources</p>
+  </div>
+  <div>
+    <span>{% if totals.latest_import %}{{ totals.latest_import|date:"M j, Y" }}{% else %}Unknown{% endif %}</span>
+    <p>Latest import</p>
+  </div>
+</section>
+{% endblock %}

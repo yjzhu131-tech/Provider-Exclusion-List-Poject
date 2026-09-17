@@ -1,0 +1,54 @@
+{% extends "exclusions/base.html" %}
+
+{% block title %}Sources | Provider Exclusion Lookup{% endblock %}
+
+{% block content %}
+<section class="toolbar">
+  <div>
+    <p class="eyebrow">Database sources</p>
+    <h1>Official files and imports</h1>
+  </div>
+</section>
+
+<section class="source-grid">
+  {% for source in data_sources %}
+    <article class="source-card">
+      <h2>{{ source.source_name }}</h2>
+      <p>{{ source.file_name }}</p>
+      <dl>
+        <dt>File type</dt><dd>{{ source.file_type }}</dd>
+        <dt>Source date</dt><dd>{{ source.source_date|date:"M j, Y"|default:"Unavailable" }}</dd>
+        <dt>Records</dt><dd>{{ source.record_count }}</dd>
+      </dl>
+    </article>
+  {% endfor %}
+</section>
+
+<section>
+  <h2>Import Log</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Imported At</th>
+          <th>Source</th>
+          <th>Status</th>
+          <th>Records Loaded</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in import_logs %}
+          <tr>
+            <td>{{ log.imported_at|date:"M j, Y g:i A" }}</td>
+            <td>{{ log.data_source.source_name }}</td>
+            <td>{{ log.status }}</td>
+            <td>{{ log.records_loaded }}</td>
+            <td>{{ log.notes|default:"" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

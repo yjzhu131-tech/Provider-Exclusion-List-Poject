@@ -1,4 +1,5 @@
 import csv
+import os
 from pathlib import Path
 
 import psycopg
@@ -19,11 +20,11 @@ ROOT = Path(__file__).resolve().parent.parent
 CLEANED_DATA_DIR = ROOT / "data" / "cleaned"
 
 # PostgreSQL connection settings.
-DB_HOST = "localhost"
-DB_PORT = "5433"
-DB_NAME = "exclusion_db"
-DB_USER = "postgres"
-DB_PASSWORD = r"\\\\"
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_PORT = os.environ.get("DB_PORT", "5433")
+DB_NAME = os.environ.get("DB_NAME", "exclusion_db")
+DB_USER = os.environ.get("DB_USER", "postgres")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", r"\\\\")
 
 
 def blank_to_none(value):
