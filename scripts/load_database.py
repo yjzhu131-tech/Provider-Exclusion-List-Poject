@@ -251,17 +251,17 @@ def insert_exclusion_records(cursor):
     inserted = 0
 
     for row in rows:
-        # Georgia rows do not have exclusion_type, reinstatement_date,
-        # waiver_date, or waiver_state. Those blank values become NULL here.
+        # Georgia/California/New York rows may not have exclusion_type,
+        # reinstatement_date, waiver_date, or waiver_state.
+        # Those blank values become NULL here.
         cursor.execute(
             """
             INSERT INTO exclusion_record (
                 exclusion_record_id, party_id, data_source_id, import_log_id,
-                exclusion_type, exclusion_date, reinstatement_date, waiver_date,
-                waiver_state, status
+                exclusion_type, exclusion_date, reinstatement_date, waiver_date, waiver_state
             )
             OVERRIDING SYSTEM VALUE
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (exclusion_record_id) DO NOTHING
             """,
             (
@@ -274,7 +274,6 @@ def insert_exclusion_records(cursor):
                 blank_to_none(row["reinstatement_date"]),
                 blank_to_none(row["waiver_date"]),
                 blank_to_none(row["waiver_state"]),
-                row["status"],
             ),
         )
         inserted += cursor.rowcount

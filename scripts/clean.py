@@ -1,4 +1,5 @@
 import csv
+import re
 from datetime import date, datetime
 from pathlib import Path
 
@@ -28,6 +29,8 @@ CLEANED_DATA_DIR = ROOT / "data" / "cleaned"
 
 LEIE_FILE = RAW_DATA_DIR / "07-2026 Updated LEIE Database.csv"
 GEORGIA_FILE = RAW_DATA_DIR / "Copy of Department of Community Health Office Of Inspector General List of Excluded Individuals and Entities as of August 7 2026- georgia.xlsx"
+CALIFORNIA_FILE = RAW_DATA_DIR / "cali-suspended-ineligible-list-august-2026.csv"
+NEW_YORK_FILE = RAW_DATA_DIR / "NYSOMIGExclusionsList.xlsx"
 
 
 def clean_text(value):
@@ -51,6 +54,14 @@ def clean_text(value):
     return " ".join(text.split())
 
 
+def truncate(value, max_length):
+    """Trim cleaned text to fit the PostgreSQL varchar size."""
+    text = clean_text(value)
+    if len(text) <= max_length:
+        return text
+    return text[:max_length]
+
+
 def clean_identifier(value):
     """Clean NPI/UPIN values. Return empty string when the ID is missing."""
     text = clean_text(value)
@@ -61,6 +72,11 @@ def clean_identifier(value):
         return ""
 
     return text
+
+
+def is_missing(value):
+    """Return True for source values that mean no useful value is present."""
+    return clean_text(value).upper() in {"", "N/A", "NA", "NONE", "NULL"}
 
 
 def parse_date(value):
@@ -107,6 +123,13 @@ def parse_date(value):
     except ValueError:
         pass
 
+    # California and New York source files use MM/DD/YYYY.
+    # Example: 7/8/2016 -> 2016-07-08
+    try:
+        return datetime.strptime(text, "%m/%d/%Y").date().isoformat()
+    except ValueError:
+        pass
+
     # Some Georgia dates are written like YYYYDDMM.
     # Example found in the file:
     #   20223108 probably means 2022-08-31
@@ -131,6 +154,61 @@ def get_party_type(first_name, last_name, business_name):
     # This should be rare, but keeps the script from crashing
     # if a row does not clearly look like a person or entity.
     return "UNKNOWN"
+
+
+def parse_address(value, default_state=""):
+    """Best-effort split of one address string into address/city/state/zip."""
+    text = clean_text(value)
+    if not text:
+        return "", "", default_state, ""
+
+    zip_code = ""
+    zip_match = re.search(r"\b(\d{5})(?:-\d{4})?\b", text)
+    if zip_match:
+        zip_code = zip_match.group(1)
+
+    state = default_state
+    state_match = re.search(r"\b([A-Z]{2})\b(?:,?\s*\d{5}(?:-\d{4})?)?$", text)
+    if state_match:
+        state = state_match.group(1)
+
+    city = ""
+    address = text
+    parts = [part.strip() for part in text.split(",") if part.strip()]
+    if len(parts) >= 3:
+        address = ", ".join(parts[:-2])
+        city = parts[-2]
+    elif len(parts) == 2:
+        address = parts[0]
+        city = re.sub(r"\b[A-Z]{2}\b.*$", "", parts[1]).strip()
+
+    address = re.sub(r"\s*,?\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?\s*$", "", address).strip()
+    return address, city, state, zip_code
+
+
+def split_identifier_values(value):
+    """Split comma/semicolon separated identifier cells into clean values."""
+    if is_missing(value):
+        return []
+
+    text = clean_text(value)
+    values = []
+    for part in re.split(r"[,;]", text):
+        identifier = clean_identifier(part)
+        if identifier and not is_missing(identifier):
+            values.append(identifier)
+    return values
+
+
+def add_identifier(identifiers, identifier_id, party_id, identifier_type, identifier_value):
+    """Append one identifier row and return the next identifier ID."""
+    identifiers.append({
+        "identifier_id": identifier_id,
+        "party_id": party_id,
+        "identifier_type": identifier_type,
+        "identifier_value": identifier_value,
+    })
+    return identifier_id + 1
 
 
 def read_cleaned_csv(file_name):
@@ -281,7 +359,6 @@ def clean_leie(data_source_id, import_log_id, start_party_id, start_identifier_i
                 "reinstatement_date": parse_date(row["REINDATE"]),
                 "waiver_date": parse_date(row["WAIVERDATE"]),
                 "waiver_state": clean_text(row["WVRSTATE"]),
-                "status": "ACTIVE",
             })
 
             # Move to the next generated IDs for the next source row.
@@ -389,7 +466,6 @@ def clean_georgia(data_source_id, import_log_id, start_party_id, start_identifie
             "reinstatement_date": "",
             "waiver_date": "",
             "waiver_state": "",
-            "status": "ACTIVE",
         })
 
         # Move to the next generated IDs for the next Georgia row.
@@ -397,6 +473,138 @@ def clean_georgia(data_source_id, import_log_id, start_party_id, start_identifie
         exclusion_record_id += 1
 
     return parties, identifiers, exclusions
+
+
+def clean_california(data_source_id, import_log_id, start_party_id, start_identifier_id, start_exclusion_record_id):
+    """Clean California suspended/ineligible CSV rows."""
+    parties = []
+    identifiers = []
+    exclusions = []
+
+    party_id = start_party_id
+    identifier_id = start_identifier_id
+    exclusion_record_id = start_exclusion_record_id
+
+    with CALIFORNIA_FILE.open(newline="", encoding="utf-8-sig") as file:
+        reader = csv.DictReader(file)
+
+        for row in reader:
+            exclusion_date = parse_date(row["Date of Suspension"])
+            if not exclusion_date:
+                continue
+
+            first_name = "" if is_missing(row["First Name"]) else clean_text(row["First Name"])
+            middle_name = "" if is_missing(row["Middle Name"]) else clean_text(row["Middle Name"])
+            last_name = "" if is_missing(row["Last Name"]) else clean_text(row["Last Name"])
+            aka_or_dba = "" if is_missing(row["A/K/A-Also Known As\nD/B/A-Doing Business as"]) else clean_text(row["A/K/A-Also Known As\nD/B/A-Doing Business as"])
+
+            business_name = ""
+            if not first_name and not middle_name and (last_name or aka_or_dba):
+                business_name = last_name or aka_or_dba
+                last_name = ""
+
+            address, city, state, zip_code = parse_address(row["Address(es)"], default_state="CA")
+
+            parties.append({
+                "party_id": party_id,
+                "party_type": get_party_type(first_name, last_name, business_name),
+                "first_name": truncate(first_name, 30),
+                "middle_name": truncate(middle_name, 100),
+                "last_name": truncate(last_name, 30),
+                "business_name": truncate(business_name, 255),
+                "provider_category": truncate(row["Provider Type"], 100),
+                "specialty": "",
+                "dob": "",
+                "address": truncate(address, 150),
+                "city": truncate(city, 50),
+                "state": truncate(state, 30),
+                "zip_code": truncate(zip_code, 10),
+            })
+
+            for license_number in split_identifier_values(row["License Number"]):
+                identifier_id = add_identifier(identifiers, identifier_id, party_id, "LICENSE", license_number)
+
+            for provider_number in split_identifier_values(row["Provider Number"]):
+                identifier_type = "NPI" if re.fullmatch(r"\d{10}", provider_number) else "PROVIDER"
+                identifier_id = add_identifier(identifiers, identifier_id, party_id, identifier_type, provider_number)
+
+            exclusions.append({
+                "exclusion_record_id": exclusion_record_id,
+                "party_id": party_id,
+                "data_source_id": data_source_id,
+                "import_log_id": import_log_id,
+                "exclusion_type": truncate(row["Active Period"], 50),
+                "exclusion_date": exclusion_date,
+                "reinstatement_date": "",
+                "waiver_date": "",
+                "waiver_state": "",
+            })
+
+            party_id += 1
+            exclusion_record_id += 1
+
+    return parties, identifiers, exclusions, party_id, identifier_id, exclusion_record_id
+
+
+def clean_new_york(data_source_id, import_log_id, start_party_id, start_identifier_id, start_exclusion_record_id):
+    """Clean New York OMIG Excel rows."""
+    parties = []
+    identifiers = []
+    exclusions = []
+
+    party_id = start_party_id
+    identifier_id = start_identifier_id
+    exclusion_record_id = start_exclusion_record_id
+
+    workbook = load_workbook(NEW_YORK_FILE, read_only=True, data_only=True)
+    worksheet = workbook["Exclusions"]
+    headers = list(next(worksheet.iter_rows(min_row=1, max_row=1, values_only=True)))
+
+    for values in worksheet.iter_rows(min_row=2, values_only=True):
+        row = dict(zip(headers, values))
+        exclusion_date = parse_date(row["exclusion_effective_date"])
+        if not exclusion_date:
+            continue
+
+        provider_name = clean_text(row["provider_name"])
+        parties.append({
+            "party_id": party_id,
+            "party_type": "ENTITY",
+            "first_name": "",
+            "middle_name": "",
+            "last_name": "",
+            "business_name": truncate(provider_name, 255),
+            "provider_category": truncate(row["provider_type"], 100),
+            "specialty": "",
+            "dob": "",
+            "address": "",
+            "city": "",
+            "state": "NY",
+            "zip_code": "",
+        })
+
+        for license_number in split_identifier_values(row["license_num"]):
+            identifier_id = add_identifier(identifiers, identifier_id, party_id, "LICENSE", license_number)
+
+        for npi in split_identifier_values(row["npi_num"]):
+            identifier_id = add_identifier(identifiers, identifier_id, party_id, "NPI", npi)
+
+        exclusions.append({
+            "exclusion_record_id": exclusion_record_id,
+            "party_id": party_id,
+            "data_source_id": data_source_id,
+            "import_log_id": import_log_id,
+            "exclusion_type": "",
+            "exclusion_date": exclusion_date,
+            "reinstatement_date": "",
+            "waiver_date": "",
+            "waiver_state": "",
+        })
+
+        party_id += 1
+        exclusion_record_id += 1
+
+    return parties, identifiers, exclusions, party_id, identifier_id, exclusion_record_id
 
 
 def main():
@@ -474,6 +682,9 @@ def main():
             start_identifier_id=next_identifier_id,
             start_exclusion_record_id=next_exclusion_id,
         )
+        next_party_id += len(georgia_parties)
+        next_identifier_id += len(georgia_identifiers)
+        next_exclusion_id += len(georgia_exclusions)
 
         data_sources.append({
             "data_source_id": georgia_data_source_id,
@@ -493,6 +704,80 @@ def main():
         all_parties += georgia_parties
         all_identifiers += georgia_identifiers
         all_exclusions += georgia_exclusions
+
+        next_data_source_id += 1
+        next_import_log_id += 1
+
+    # Clean California only if this exact file name has not been processed before.
+    if CALIFORNIA_FILE.name in processed_file_names:
+        print(f"Skipped already-cleaned file: {CALIFORNIA_FILE.name}")
+    else:
+        california_data_source_id = next_data_source_id
+        california_import_log_id = next_import_log_id
+
+        california_parties, california_identifiers, california_exclusions, next_party_id, next_identifier_id, next_exclusion_id = clean_california(
+            data_source_id=california_data_source_id,
+            import_log_id=california_import_log_id,
+            start_party_id=next_party_id,
+            start_identifier_id=next_identifier_id,
+            start_exclusion_record_id=next_exclusion_id,
+        )
+
+        data_sources.append({
+            "data_source_id": california_data_source_id,
+            "source_name": "California DHCS Suspended and Ineligible Provider List",
+            "file_name": CALIFORNIA_FILE.name,
+            "file_type": "CSV",
+            "source_date": "2026-08-01",
+        })
+        import_logs.append({
+            "import_log_id": california_import_log_id,
+            "data_source_id": california_data_source_id,
+            "imported_at": datetime.now().isoformat(timespec="seconds"),
+            "status": "SUCCESS",
+            "records_loaded": len(california_exclusions),
+            "notes": "Cleaned from California CSV; rows without Date of Suspension skipped",
+        })
+        all_parties += california_parties
+        all_identifiers += california_identifiers
+        all_exclusions += california_exclusions
+
+        next_data_source_id += 1
+        next_import_log_id += 1
+
+    # Clean New York only if this exact file name has not been processed before.
+    if NEW_YORK_FILE.name in processed_file_names:
+        print(f"Skipped already-cleaned file: {NEW_YORK_FILE.name}")
+    else:
+        new_york_data_source_id = next_data_source_id
+        new_york_import_log_id = next_import_log_id
+
+        new_york_parties, new_york_identifiers, new_york_exclusions, next_party_id, next_identifier_id, next_exclusion_id = clean_new_york(
+            data_source_id=new_york_data_source_id,
+            import_log_id=new_york_import_log_id,
+            start_party_id=next_party_id,
+            start_identifier_id=next_identifier_id,
+            start_exclusion_record_id=next_exclusion_id,
+        )
+
+        data_sources.append({
+            "data_source_id": new_york_data_source_id,
+            "source_name": "New York OMIG Exclusions List",
+            "file_name": NEW_YORK_FILE.name,
+            "file_type": "XLSX",
+            "source_date": "",
+        })
+        import_logs.append({
+            "import_log_id": new_york_import_log_id,
+            "data_source_id": new_york_data_source_id,
+            "imported_at": datetime.now().isoformat(timespec="seconds"),
+            "status": "SUCCESS",
+            "records_loaded": len(new_york_exclusions),
+            "notes": "Cleaned from New York OMIG XLSX; rows without exclusion_effective_date skipped",
+        })
+        all_parties += new_york_parties
+        all_identifiers += new_york_identifiers
+        all_exclusions += new_york_exclusions
 
     # Append new rows to the five cleaned CSV files.
     # These file names match the five PostgreSQL tables.
@@ -525,7 +810,7 @@ def main():
         [
             "exclusion_record_id", "party_id", "data_source_id", "import_log_id",
             "exclusion_type", "exclusion_date", "reinstatement_date", "waiver_date",
-            "waiver_state", "status",
+            "waiver_state",
         ],
         all_exclusions,
     )

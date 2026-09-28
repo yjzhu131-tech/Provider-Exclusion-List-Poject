@@ -1,9 +1,11 @@
 # Provider Exclusion Database
 
-This project builds a PostgreSQL database for healthcare provider exclusion records from two official sources:
+This project builds a PostgreSQL database for healthcare provider exclusion records from four official sources:
 
 - HHS OIG LEIE exclusion list
 - Georgia DCH OIG exclusion list
+- California DHCS Suspended and Ineligible Provider List
+- New York OMIG Exclusions List
 
 The goal is to clean raw exclusion files, organize the data into relational tables, and make provider exclusion records easier to search and maintain.
 
@@ -26,6 +28,8 @@ The raw files are stored in `data/raw/`:
 ```text
 07-2026 Updated LEIE Database.csv
 Copy of Department of Community Health Office Of Inspector General List of Excluded Individuals and Entities as of August 7 2026- georgia.xlsx
+cali-suspended-ineligible-list-august-2026.csv
+NYSOMIGExclusionsList.xlsx
 ```
 
 The cleaned output files are generated in `data/cleaned/`:
@@ -46,8 +50,8 @@ The database uses five main tables:
 data_source       Source file information
 import_log        Import record for each source file
 excluded_party    Excluded individual or entity
-identifier        NPI or UPIN values connected to a party
-exclusion_record  Exclusion details such as date, type, waiver, and status
+identifier        NPI, UPIN, license, or provider values connected to a party
+exclusion_record  Exclusion details such as date, type, and waiver
 ```
 
 Table relationships are shown in:
@@ -61,9 +65,9 @@ docs/dbdiagram.pdf
 
 The Django website provides a search interface for looking up excluded providers and entities.
 
-Users can search by name, business name, NPI, or UPIN. Optional filters include party type, state, city, ZIP code, data source, status, exclusion type, and exclusion date range.
+Users can search by name, business name, NPI, UPIN, license number, or provider number. Optional filters include party type, state, city, ZIP code, data source, exclusion type, and exclusion date range.
 
-After submitting a search, the results page shows matching excluded individuals or entities with summary information such as name, provider category, location, identifier, exclusion status, exclusion date, exclusion type, and source. Each result can be clicked to open a detail page with the full party information, identifiers, and complete exclusion record history.
+After submitting a search, the results page shows matching excluded individuals or entities with summary information such as name, provider category, location, identifier, exclusion date, exclusion type, and source. Each result can be clicked to open a detail page with the full party information, identifiers, and complete exclusion record history.
 
 Example search interface:
 
@@ -103,9 +107,35 @@ This inserts new rows into the database. Existing primary keys are skipped with 
 
 5. Run the Django lookup website:
 
+If you are in the project root folder:
+
 ```bash
 cd web
 python3 manage.py runserver
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000/
+```
+
+If your terminal already shows that you are inside the `web` folder, do not run `cd web` again. Just run:
+
+```bash
+python3 manage.py runserver
+```
+
+If you see `Error: That port is already in use`, run the server on another port:
+
+```bash
+python3 manage.py runserver 8001
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8001/
 ```
 
 The website connects to the existing PostgreSQL tables. You can override the database connection with environment variables:
@@ -122,6 +152,9 @@ DB_PORT
 
 - LEIE `EXCLDATE` is mapped to `exclusion_date`.
 - Georgia `SANCDATE` is mapped to `exclusion_date`.
+- California `Date of Suspension` is mapped to `exclusion_date`.
+- New York `exclusion_effective_date` is mapped to `exclusion_date`.
 - LEIE `NPI = 0000000000` is treated as missing and is not inserted into `identifier`.
+- The old exclusion `status` field was removed because all rows were shown as `ACTIVE`, which could be misleading.
 - Empty source values are loaded into PostgreSQL as `NULL`.
 - The project is designed for monthly updates by appending new cleaned data instead of overwriting old data.

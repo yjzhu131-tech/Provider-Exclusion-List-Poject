@@ -53,8 +53,6 @@ def results(request):
             parties = parties.filter(zip_code__startswith=data["zip_code"])
         if data.get("source"):
             parties = parties.filter(exclusion_records__data_source=data["source"])
-        if data.get("status"):
-            parties = parties.filter(exclusion_records__status__iexact=data["status"])
         if data.get("exclusion_type"):
             parties = parties.filter(exclusion_records__exclusion_type__iexact=data["exclusion_type"])
         if data.get("date_from"):

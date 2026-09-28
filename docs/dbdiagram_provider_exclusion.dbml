@@ -52,5 +52,4 @@ Table exclusion_record {
   reinstatement_date date
   waiver_date date
   waiver_state varchar(10)
-  status varchar(20) [default: 'ACTIVE'] // ACTIVE
 }

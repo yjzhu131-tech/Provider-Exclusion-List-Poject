@@ -37,7 +37,6 @@
     <table>
       <thead>
         <tr>
-          <th>Status</th>
           <th>Type</th>
           <th>Exclusion Date</th>
           <th>Reinstatement</th>
@@ -48,7 +47,6 @@
       <tbody>
         {% for record in party.exclusion_records.all %}
           <tr>
-            <td>{{ record.status }}</td>
             <td>{{ record.exclusion_type|default:"" }}</td>
             <td>{{ record.exclusion_date|date:"M j, Y" }}</td>
             <td>{{ record.reinstatement_date|date:"M j, Y"|default:"" }}</td>

@@ -58,7 +58,6 @@ CREATE TABLE exclusion_record (
     reinstatement_date DATE,
     waiver_date DATE,
     waiver_state VARCHAR(10),
-    status VARCHAR(20) DEFAULT 'ACTIVE',
 
     CONSTRAINT fk_exclusion_record_excluded_party
         FOREIGN KEY (party_id) REFERENCES excluded_party (party_id)

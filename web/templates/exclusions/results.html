@@ -23,7 +23,6 @@
       <div class="result-meta">
         {% with record=party.exclusion_records.all.0 %}
           {% if record %}
-            <strong>{{ record.status }}</strong>
             <span>{{ record.exclusion_date|date:"M j, Y" }}</span>
             <span>{{ record.exclusion_type|default:"No type code" }}</span>
             <span>{{ record.data_source.source_name }}</span>

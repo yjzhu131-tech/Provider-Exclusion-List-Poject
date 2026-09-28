@@ -1,3 +1,5 @@
 import_log_id,data_source_id,imported_at,status,records_loaded,notes
 1,1,2026-08-19T19:09:06,SUCCESS,83842,Cleaned from LEIE CSV
 2,2,2026-08-19T19:09:06,SUCCESS,1369,Cleaned from Georgia XLSX; rows without SANCDATE skipped
+3,3,2026-09-23T13:49:00,SUCCESS,23433,Cleaned from California CSV; rows without Date of Suspension skipped
+4,4,2026-09-23T13:49:00,SUCCESS,9092,Cleaned from New York OMIG XLSX; rows without exclusion_effective_date skipped
